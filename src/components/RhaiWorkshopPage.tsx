@@ -29,15 +29,19 @@ function useWorkshopConfig(): WorkshopConfig {
   return config;
 }
 
-// Find the xterm textarea in the web terminal and paste text into it.
+// Find the xterm textarea in the active terminal tab and paste text into it.
 function pasteIntoTerminal(text: string) {
-  const textarea = document.querySelector(
+  // Target the active tab panel so paste goes to whichever terminal
+  // the user has selected. Inactive panels have the `hidden` attribute.
+  const activePanel = document.querySelector(
+    'section[role="tabpanel"]:not([hidden])',
+  );
+  const textarea = (activePanel || document).querySelector(
     'textarea.xterm-helper-textarea',
   ) as HTMLTextAreaElement | null;
 
   if (textarea) {
     textarea.focus();
-    // xterm.js reads pasted text from event.clipboardData.getData('text/plain')
     const dt = new DataTransfer();
     dt.setData('text/plain', text);
     const pasteEvent = new ClipboardEvent('paste', {
