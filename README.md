@@ -1,6 +1,6 @@
 # RHAI Workshop Console Plugin
 
-n a 4.10+ OpenShift cluster, deploy this dynamic console plugin.
+On a 4.10+ OpenShift cluster, deploy this dynamic console plugin.
 
 See [CLAUDE.md](CLAUDE.md) for more details.
 
