@@ -2,6 +2,8 @@
 
 On a 4.10+ OpenShift cluster, deploy this dynamic console plugin.
 
+Dependencies: **rhai-nav-plugin** must be deployed first — it defines the "RHAI" top-level navigation section that this plugin's nav item references.
+
 See [CLAUDE.md](CLAUDE.md) for more details.
 
 Install using a GitOps approach and kustomize:
