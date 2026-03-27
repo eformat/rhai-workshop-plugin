@@ -8,13 +8,21 @@
     }
   },
   {
+    "type": "console.navigation/section",
+    "properties": {
+      "id": "rhai",
+      "name": "RHAI",
+      "perspective": "admin"
+    }
+  },
+  {
     "type": "console.navigation/href",
     "properties": {
       "id": "rhai-workshop",
-      "name": "RHAI Workshop",
+      "name": "Workshop",
       "href": "/rhai-workshop",
       "perspective": "admin",
-      "section": "home"
+      "section": "rhai"
     }
   }
 ]
