@@ -78,15 +78,16 @@ export default function RhaiWorkshopPage() {
   const config = useWorkshopConfig();
   const [leftWidth, setLeftWidth] = React.useState(50);
   const [activeTab, setActiveTab] = React.useState(0);
-  const [leftUrl, setLeftUrl] = React.useState('');
-  const [urlInput, setUrlInput] = React.useState('');
+  const [leftUrl, setLeftUrl] = React.useState(config.openshiftAiUrl);
+  const [urlInput, setUrlInput] = React.useState(config.openshiftAiUrl);
   const [urlBarOpen, setUrlBarOpen] = React.useState(false);
+  const userNavigated = React.useRef(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dragging = React.useRef(false);
 
-  // Initialize left URL from config
+  // Update from config when async fetch completes, unless user has manually navigated
   React.useEffect(() => {
-    if (config.openshiftAiUrl && !leftUrl) {
+    if (config.openshiftAiUrl && !userNavigated.current) {
       setLeftUrl(config.openshiftAiUrl);
       setUrlInput(config.openshiftAiUrl);
     }
@@ -98,6 +99,7 @@ export default function RhaiWorkshopPage() {
       url = 'https://' + url;
     }
     if (url) {
+      userNavigated.current = true;
       setLeftUrl(url);
       setUrlInput(url);
     }
@@ -219,7 +221,7 @@ export default function RhaiWorkshopPage() {
               width: '100%',
               pointerEvents: dragging.current ? 'none' : 'auto',
             }}
-            src={leftUrl || config.openshiftAiUrl}
+            src={leftUrl}
           />
         </div>
         {/* Resizable splitter */}
