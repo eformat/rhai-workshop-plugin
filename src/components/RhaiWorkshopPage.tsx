@@ -1,6 +1,17 @@
 import * as React from 'react';
 import Helmet from 'react-helmet';
-import { Tabs, Tab, TabTitleText } from '@patternfly/react-core';
+import {
+  Tabs,
+  Tab,
+  TabTitleText,
+  TextInput,
+  Button,
+  InputGroup,
+  InputGroupItem,
+} from '@patternfly/react-core';
+import AngleDownIcon from '@patternfly/react-icons/dist/esm/icons/angle-down-icon';
+import AngleUpIcon from '@patternfly/react-icons/dist/esm/icons/angle-up-icon';
+import ArrowRightIcon from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon';
 
 interface TutorialEntry {
   name: string;
@@ -67,8 +78,30 @@ export default function RhaiWorkshopPage() {
   const config = useWorkshopConfig();
   const [leftWidth, setLeftWidth] = React.useState(50);
   const [activeTab, setActiveTab] = React.useState(0);
+  const [leftUrl, setLeftUrl] = React.useState('');
+  const [urlInput, setUrlInput] = React.useState('');
+  const [urlBarOpen, setUrlBarOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dragging = React.useRef(false);
+
+  // Initialize left URL from config
+  React.useEffect(() => {
+    if (config.openshiftAiUrl && !leftUrl) {
+      setLeftUrl(config.openshiftAiUrl);
+      setUrlInput(config.openshiftAiUrl);
+    }
+  }, [config.openshiftAiUrl]);
+
+  const navigateLeft = () => {
+    let url = urlInput.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      url = 'https://' + url;
+    }
+    if (url) {
+      setLeftUrl(url);
+      setUrlInput(url);
+    }
+  };
 
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -137,16 +170,58 @@ export default function RhaiWorkshopPage() {
           width: '100%',
         }}
       >
-        <iframe
-          title="OpenShift AI"
+        {/* Left pane: collapsible URL bar + iframe */}
+        <div
           style={{
             width: `${leftWidth}%`,
-            border: 'none',
+            display: 'flex',
+            flexDirection: 'column',
             height: '100%',
-            pointerEvents: dragging.current ? 'none' : 'auto',
           }}
-          src={config.openshiftAiUrl}
-        />
+        >
+          {/* URL bar toggle + input */}
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <Button
+              variant="plain"
+              onClick={() => setUrlBarOpen((prev) => !prev)}
+              aria-label={urlBarOpen ? 'Collapse URL bar' : 'Expand URL bar'}
+              style={{ padding: '4px 8px' }}
+            >
+              {urlBarOpen ? <AngleUpIcon /> : <AngleDownIcon />}
+            </Button>
+            {urlBarOpen && (
+              <InputGroup style={{ flex: 1, marginRight: '4px' }}>
+                <InputGroupItem isFill>
+                  <TextInput
+                    type="url"
+                    aria-label="URL"
+                    value={urlInput}
+                    onChange={(_e, val) => setUrlInput(val)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') navigateLeft();
+                    }}
+                    placeholder="https://..."
+                  />
+                </InputGroupItem>
+                <InputGroupItem>
+                  <Button variant="control" onClick={navigateLeft} aria-label="Go">
+                    <ArrowRightIcon />
+                  </Button>
+                </InputGroupItem>
+              </InputGroup>
+            )}
+          </div>
+          <iframe
+            title="OpenShift AI"
+            style={{
+              flex: 1,
+              border: 'none',
+              width: '100%',
+              pointerEvents: dragging.current ? 'none' : 'auto',
+            }}
+            src={leftUrl || config.openshiftAiUrl}
+          />
+        </div>
         {/* Resizable splitter */}
         <div
           onMouseDown={onMouseDown}
