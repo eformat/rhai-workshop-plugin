@@ -23,7 +23,7 @@ Note: Temporary add-ons in Firefox are removed when the browser closes. For pers
 
 ## Configuration
 
-Both extensions are pre-configured for the console hostname:
+Both extensions are pre-configured for the console hostname which is generated for just the cluster you are running in:
 
 ```
 console-openshift-console.apps.cluster-name.example.com
