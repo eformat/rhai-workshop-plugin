@@ -4,15 +4,12 @@ import {
   Tabs,
   Tab,
   TabTitleText,
-  TextInput,
   Button,
-  InputGroup,
-  InputGroupItem,
   Popover,
+  SearchInput,
 } from '@patternfly/react-core';
 import AngleDownIcon from '@patternfly/react-icons/dist/esm/icons/angle-down-icon';
 import AngleUpIcon from '@patternfly/react-icons/dist/esm/icons/angle-up-icon';
-import ArrowRightIcon from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon';
 import SyncAltIcon from '@patternfly/react-icons/dist/esm/icons/sync-alt-icon';
 import DownloadIcon from '@patternfly/react-icons/dist/esm/icons/download-icon';
 import { downloadChromeExtension, downloadFirefoxExtension } from './extensionGenerator';
@@ -82,7 +79,8 @@ export default function RhaiWorkshopPage() {
   const config = useWorkshopConfig();
   const [leftWidth, setLeftWidth] = React.useState(50);
   const [activeTab, setActiveTab] = React.useState(0);
-  const [leftUrl, setLeftUrl] = React.useState(config.openshiftAiUrl);
+  const [urlHistory, setUrlHistory] = React.useState<string[]>([config.openshiftAiUrl]);
+  const [historyIndex, setHistoryIndex] = React.useState(0);
   const [urlInput, setUrlInput] = React.useState(config.openshiftAiUrl);
   const [urlBarOpen, setUrlBarOpen] = React.useState(false);
   const [leftKey, setLeftKey] = React.useState(0);
@@ -90,23 +88,45 @@ export default function RhaiWorkshopPage() {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dragging = React.useRef(false);
 
+  const leftUrl = urlHistory[historyIndex] || config.openshiftAiUrl;
+
   // Update from config when async fetch completes, unless user has manually navigated
   React.useEffect(() => {
     if (config.openshiftAiUrl && !userNavigated.current) {
-      setLeftUrl(config.openshiftAiUrl);
+      setUrlHistory([config.openshiftAiUrl]);
+      setHistoryIndex(0);
       setUrlInput(config.openshiftAiUrl);
     }
   }, [config.openshiftAiUrl]);
 
-  const navigateLeft = () => {
-    let url = urlInput.trim();
+  const navigateLeft = (input?: string) => {
+    let url = (input || urlInput).trim();
     if (url && !/^https?:\/\//i.test(url)) {
       url = 'https://' + url;
     }
-    if (url) {
+    if (url && url !== leftUrl) {
       userNavigated.current = true;
-      setLeftUrl(url);
+      const newHistory = urlHistory.slice(0, historyIndex + 1);
+      newHistory.push(url);
+      setUrlHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
       setUrlInput(url);
+    }
+  };
+
+  const goBack = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setUrlInput(urlHistory[newIndex]);
+    }
+  };
+
+  const goForward = () => {
+    if (historyIndex < urlHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setUrlInput(urlHistory[newIndex]);
     }
   };
 
@@ -197,70 +217,73 @@ export default function RhaiWorkshopPage() {
               {urlBarOpen ? <AngleUpIcon /> : <AngleDownIcon />}
             </Button>
             {urlBarOpen && (
-              <Popover
-                headerContent="Iframe Unblocker Extension"
-                bodyContent={
-                  <div>
-                    <p style={{ marginBottom: '8px' }}>
-                      Some sites (e.g. OpenShift Console) block iframe embedding.
-                      Install this browser extension to allow it.
-                    </p>
-                    <p style={{ marginBottom: '12px', fontSize: '12px', color: '#6a6e73' }}>
-                      Auto-configured for: <strong>{window.location.hostname}</strong>
-                    </p>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                      <Button variant="primary" size="sm" onClick={downloadChromeExtension}>
-                        Chrome
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={downloadFirefoxExtension}>
-                        Firefox
-                      </Button>
+              <>
+                <Popover
+                  headerContent="Iframe Unblocker Extension"
+                  bodyContent={
+                    <div>
+                      <p style={{ marginBottom: '8px' }}>
+                        Some sites (e.g. OpenShift Console) block iframe embedding.
+                        Install this browser extension to allow it.
+                      </p>
+                      <p style={{ marginBottom: '12px', fontSize: '12px', color: '#6a6e73' }}>
+                        Auto-configured for: <strong>{window.location.hostname}</strong>
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                        <Button variant="primary" size="sm" onClick={downloadChromeExtension}>
+                          Chrome
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={downloadFirefoxExtension}>
+                          Firefox
+                        </Button>
+                      </div>
+                      <p style={{ fontSize: '12px', color: '#6a6e73' }}>
+                        <strong>Chrome:</strong> Unzip, open chrome://extensions, enable Developer
+                        mode, click Load unpacked, select the folder.
+                      </p>
+                      <p style={{ fontSize: '12px', color: '#6a6e73', marginTop: '4px' }}>
+                        <strong>Firefox:</strong> Unzip, open about:debugging#/runtime/this-firefox,
+                        click Load Temporary Add-on, select manifest.json.
+                      </p>
                     </div>
-                    <p style={{ fontSize: '12px', color: '#6a6e73' }}>
-                      <strong>Chrome:</strong> Unzip, open chrome://extensions, enable Developer
-                      mode, click Load unpacked, select the folder.
-                    </p>
-                    <p style={{ fontSize: '12px', color: '#6a6e73', marginTop: '4px' }}>
-                      <strong>Firefox:</strong> Unzip, open about:debugging#/runtime/this-firefox,
-                      click Load Temporary Add-on, select manifest.json.
-                    </p>
-                  </div>
-                }
-              >
+                  }
+                >
+                  <Button
+                    variant="plain"
+                    aria-label="Download iframe unblocker extension"
+                    style={{ padding: '4px 8px' }}
+                  >
+                    <DownloadIcon />
+                  </Button>
+                </Popover>
+                <SearchInput
+                  style={{ flex: 1, marginRight: '4px' }}
+                  aria-label="URL"
+                  placeholder="https://..."
+                  value={urlInput}
+                  onChange={(_e, val) => setUrlInput(val)}
+                  onSearch={(_e, val) => navigateLeft(val)}
+                  onClear={() => {
+                    setUrlInput('');
+                  }}
+                  onPreviousClick={goBack}
+                  onNextClick={goForward}
+                  isPreviousNavigationButtonDisabled={historyIndex <= 0}
+                  isNextNavigationButtonDisabled={historyIndex >= urlHistory.length - 1}
+                  previousNavigationButtonAriaLabel="Back"
+                  nextNavigationButtonAriaLabel="Forward"
+                  resultsCount={`${historyIndex + 1} / ${urlHistory.length}`}
+                  submitSearchButtonLabel="Go"
+                />
                 <Button
                   variant="plain"
-                  aria-label="Download iframe unblocker extension"
+                  onClick={() => setLeftKey((k) => k + 1)}
+                  aria-label="Refresh"
                   style={{ padding: '4px 8px' }}
                 >
-                  <DownloadIcon />
+                  <SyncAltIcon />
                 </Button>
-              </Popover>
-            )}
-            {urlBarOpen && (
-              <InputGroup style={{ flex: 1, marginRight: '4px' }}>
-                <InputGroupItem isFill>
-                  <TextInput
-                    type="url"
-                    aria-label="URL"
-                    value={urlInput}
-                    onChange={(_e, val) => setUrlInput(val)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') navigateLeft();
-                    }}
-                    placeholder="https://..."
-                  />
-                </InputGroupItem>
-                <InputGroupItem>
-                  <Button variant="control" onClick={navigateLeft} aria-label="Go">
-                    <ArrowRightIcon />
-                  </Button>
-                </InputGroupItem>
-                <InputGroupItem>
-                  <Button variant="control" onClick={() => setLeftKey((k) => k + 1)} aria-label="Refresh">
-                    <SyncAltIcon />
-                  </Button>
-                </InputGroupItem>
-              </InputGroup>
+              </>
             )}
           </div>
           <iframe

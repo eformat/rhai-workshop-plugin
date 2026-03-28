@@ -6,7 +6,7 @@
 
 ## Layout
 
-A Console Plugin that contains 2 iframes.
+A Console Plugin that contains 2 iframes with a resizable splitter.
 
 1. Left Half of the screen. RedHat OpenShift AI. The url is dynamically retrieved from:
 
@@ -14,9 +14,24 @@ A Console Plugin that contains 2 iframes.
 oc get ConsoleLink rhodslink -o jsonpath={.spec.href}
 ```
 
+The left pane has a collapsible URL bar (PatternFly `SearchInput`) with:
+- **Back/forward navigation** through URL history
+- **Search/Go button** to navigate to a new URL (auto-prepends `https://` if missing)
+- **Refresh button** to reload the current page
+- **Download button** for the iframe unblocker browser extension (see below)
+
 2. Right Half of the screen. Configurable tutorial links e.g. `https://eformat.github.io/voice-agents/voice-agents/index.html`
 
 We also open the OpenShift command line terminal - this is always at the bottom of the page - full width.
+
+## Browser Extension (Iframe Unblocker)
+
+The OpenShift console sets `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'` which prevents it from being embedded in an iframe. The plugin includes a dynamically generated browser extension that strips these headers for the current cluster's console hostname.
+
+- Click the download icon in the URL bar to get Chrome or Firefox extension zips
+- Extensions are generated client-side (`src/components/extensionGenerator.ts`) with the correct hostname from `window.location.hostname`
+- Only affects `sub_frame` (iframe) requests to the console — regular browsing is unaffected
+- See `BROWSER_EXTENSIONS.md` for installation instructions
 
 ## Configuration
 
@@ -89,7 +104,9 @@ oc rollout restart deployment/rhai-workshop-plugin -n rhai-workshop-plugin
 
 ## Project Structure
 
-- `src/components/RhaiWorkshopPage.tsx` - Main plugin component (iframes, postMessage listener, terminal auto-open, paste logic)
+- `src/components/RhaiWorkshopPage.tsx` - Main plugin component (iframes, URL bar with history, postMessage listener, terminal auto-open, paste logic)
+- `src/components/extensionGenerator.ts` - Client-side browser extension zip generator (Chrome & Firefox) with minimal zip implementation
 - `console-extensions.json` - Plugin route (`/rhai-workshop`) and nav entry
 - `gitops/` - Kubernetes manifests (Namespace, ServiceAccount, ClusterRole, ClusterRoleBinding, ConfigMaps, Deployment, Service, ConsolePlugin)
+- `BROWSER_EXTENSIONS.md` - Installation instructions for the iframe unblocker extensions
 - `Makefile` - Build/push targets using podman
