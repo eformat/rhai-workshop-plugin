@@ -57,7 +57,7 @@ metadata:
 rules:
 - apiGroups: ["console.openshift.io"]
   resources: ["consolelinks"]
-  verbs: ["get"]
+  verbs: ["get", "list"]
 - apiGroups: ["operator.openshift.io"]
   resources: ["consoles"]
   verbs: ["get", "patch"]
@@ -144,7 +144,20 @@ spec:
           }"
 
           # Generate config.json
-          OPENSHIFT_AI_URL=$(kubectl get consolelink rhodslink -o jsonpath='{.spec.href}' 2>/dev/null || echo "")
+          echo "Discovering OpenShift AI URL from consolelink/rhodslink..."
+          OPENSHIFT_AI_URL=""
+          for i in 1 2 3; do
+            OPENSHIFT_AI_URL=$(oc get consolelink rhodslink -o jsonpath='{.spec.href}' 2>&1) && break
+            echo "Attempt $i failed: $OPENSHIFT_AI_URL"
+            OPENSHIFT_AI_URL=""
+            sleep 5
+          done
+          if [ -z "$OPENSHIFT_AI_URL" ]; then
+            echo "WARNING: Could not discover openshiftAiUrl. Available consolelinks:"
+            oc get consolelinks --no-headers 2>&1 || true
+          else
+            echo "Discovered openshiftAiUrl: $OPENSHIFT_AI_URL"
+          fi
           TUTORIAL_URLS=$(cat /config/tutorialUrls)
           cat > /config-out/config.json <<EOF
           {
