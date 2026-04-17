@@ -81,15 +81,58 @@ oc apply -f some-resource.yaml
   </script>
 ```
 
+## Showroom Proxy (Per-User Variable Substitution)
+
+When deployed with the showroom overlay (`gitops/overlays/showroom`), the plugin proxies tutorial content through nginx with per-user `sub_filter` rules that replace placeholder values with real user credentials.
+
+### Architecture
+
+1. **showroom-proxy-watcher** (Go) — watches for `user-*-showroom` namespaces, reads `showroom-userdata` ConfigMaps, generates per-user nginx location blocks, writes to `showroom-proxy-conf` ConfigMap, and triggers rolling restart of the plugin deployment when config changes.
+2. **nginx sub_filter** — each user gets a `/tutorial-proxy/<guid>/` location block that proxies to GitHub Pages and replaces placeholder defaults with real values.
+3. **React client** — `useCurrentUserGuid()` fetches `/proxy-users.json` and the current OpenShift user identity. When the user's GUID is in the proxy list, `rewriteTutorialUrls()` rewrites tutorial iframe URLs through the proxy. Falls back to direct GitHub Pages URLs when proxy is not configured.
+
+### How it works
+
+- Watcher reconciles on namespace watch events (debounced) and on a periodic timer (default 30s).
+- Proxy host is auto-detected from the first `https://` URL in `tutorialUrls` in the `workshop-config` ConfigMap.
+- The watcher deduplicates `sub_filter` rules by default value (alphabetically first key wins) and sorts rules longest-first to avoid partial matches.
+- Directory-style proxy URLs get a trailing `/` appended to avoid 301 redirects that break relative URL resolution through the console proxy chain.
+
+### Tutorial repo requirements
+
+Each tutorial's `antora.yml` attributes must use the same default placeholder values as `showroomDefaults` in the `workshop-config` ConfigMap. Use `%placeholder%` patterns for values that would otherwise conflict (e.g. `password`):
+
+```yaml
+# content/antora.yml
+asciidoc:
+  attributes:
+    guid: abc123
+    bastion_public_hostname: bastion.example.com
+    bastion_ssh_password: "%bastion_ssh_password%"
+    password: "%password%"
+    user: user-abc123
+    openshift_console_url: https://console-openshift-console.apps.cluster.example.com
+    openshift_cluster_ingress_domain: apps.cluster.example.com
+    openshift_api_url: "https://api.cluster.example.com:6443"
+```
+
 ## Build & Deploy
 
 ```bash
-# Build and push image
-make podman-build
-make podman-push-nobuild
+# Build and push plugin image
+make podman-push
 
-# Deploy via GitOps (plugin is auto-enabled by the init container)
-oc apply -k ./gitops
+# Build and push watcher image
+make watcher-push
+
+# Build and push all images
+make all-push
+
+# Deploy base (no showroom proxy)
+oc apply -k ./gitops/base
+
+# Deploy with showroom proxy overlay
+oc apply -k ./gitops/overlays/showroom
 
 # Restart after image update
 oc rollout restart deployment/rhai-workshop-plugin -n rhai-workshop-plugin
@@ -97,7 +140,9 @@ oc rollout restart deployment/rhai-workshop-plugin -n rhai-workshop-plugin
 
 ## Project Structure
 
-- `src/components/RhaiWorkshopPage.tsx` - Main plugin component (iframes, URL bar with history, postMessage listener, terminal auto-open, paste logic)
+- `src/components/RhaiWorkshopPage.tsx` - Main plugin component (iframes, URL bar with history, postMessage listener, terminal auto-open, paste logic, per-user proxy URL rewriting)
 - `console-extensions.json` - Plugin route (`/rhai-workshop`) and nav entry
-- `gitops/` - Kubernetes manifests (Namespace, ServiceAccount, ClusterRole, ClusterRoleBinding, ConfigMaps, Deployment, Service, ConsolePlugin)
-- `Makefile` - Build/push targets using podman
+- `gitops/base/` - Base Kubernetes manifests (Namespace, ServiceAccount, ClusterRole, ClusterRoleBinding, ConfigMaps, Deployment, Service, ConsolePlugin)
+- `gitops/overlays/showroom/` - Showroom overlay (proxy watcher deployment, proxy config, nginx/deployment/workshop-config patches)
+- `showroom-proxy-watcher/` - Go namespace watcher that generates per-user nginx proxy config
+- `Makefile` - Build/push targets for plugin and watcher images
