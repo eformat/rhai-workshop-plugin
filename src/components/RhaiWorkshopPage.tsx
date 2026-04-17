@@ -187,6 +187,8 @@ export default function RhaiWorkshopPage() {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'copy' && typeof event.data.text === 'string') {
         pasteIntoTerminal(event.data.text);
+        // Also copy to system clipboard from the top-level context where it's allowed
+        navigator.clipboard?.writeText(event.data.text).catch(() => {});
       }
     };
     window.addEventListener('message', handleMessage);

@@ -258,7 +258,7 @@ func readShowroomDefaults(ctx context.Context, clientset kubernetes.Interface) (
 		return nil, "", fmt.Errorf("getting workshop-config: %w", err)
 	}
 
-	defaults := parseShowroomData(cm.Data["showroomDefaults"])
+	defaults := parseShowroomOrJSON(cm.Data["showroomDefaults"])
 
 	// Auto-detect proxy host from tutorialUrls
 	var host string
@@ -298,6 +298,19 @@ func parseShowroomData(data string) map[string]string {
 		}
 	}
 	return result
+}
+
+// parseShowroomOrJSON tries JSON first, then falls back to the YAML-like
+// "key": "value" format used by showroom-userdata.
+func parseShowroomOrJSON(data string) map[string]string {
+	trimmed := strings.TrimSpace(data)
+	if strings.HasPrefix(trimmed, "{") {
+		var m map[string]string
+		if err := json.Unmarshal([]byte(trimmed), &m); err == nil {
+			return m
+		}
+	}
+	return parseShowroomData(data)
 }
 
 type subFilterRule struct {
@@ -351,8 +364,24 @@ func generateProxyConf(users []userShowroomData, defaults map[string]string, hos
 		b.WriteString(fmt.Sprintf("    proxy_set_header Host %s;\n", host))
 		b.WriteString("    proxy_set_header Accept-Encoding \"\";\n")
 		b.WriteString("    gunzip on;\n")
+		b.WriteString("    proxy_hide_header Permissions-Policy;\n")
+		b.WriteString("    add_header Permissions-Policy \"clipboard-read=*, clipboard-write=*\" always;\n")
 		b.WriteString("    sub_filter_once off;\n")
 		b.WriteString("    sub_filter_types text/html text/css application/javascript;\n")
+		// Inject clipboard fallback for browsers that block Clipboard API in iframes
+		b.WriteString("    sub_filter '</head>' '<script>")
+		b.WriteString("(function(){if(!navigator.clipboard)return;")
+		b.WriteString("var o=navigator.clipboard.writeText.bind(navigator.clipboard);")
+		b.WriteString("navigator.clipboard.writeText=function(t){")
+		b.WriteString("return o(t).catch(function(){")
+		b.WriteString("var a=document.createElement(\"textarea\");")
+		b.WriteString("a.value=t;a.style.position=\"fixed\";a.style.left=\"-9999px\";")
+		b.WriteString("document.body.appendChild(a);a.select();")
+		b.WriteString("document.execCommand(\"copy\");")
+		b.WriteString("document.body.removeChild(a);")
+		b.WriteString("return Promise.resolve();")
+		b.WriteString("});};")
+		b.WriteString("})();</script></head>';\n")
 		for _, rule := range rules {
 			b.WriteString(fmt.Sprintf("    sub_filter '%s' '%s';\n", rule.defaultVal, rule.realVal))
 		}
