@@ -3,13 +3,15 @@ REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/eformat/rhai-workshop-plugin
 
 IMG := $(REPOSITORY):latest
-WATCHER_REPOSITORY ?= $(REGISTRY)/eformat/showroom-proxy-watcher
-WATCHER_IMG := $(WATCHER_REPOSITORY):latest
 PODMAN_ARGS ?=
 
-# clean compile
+# clean compile frontend
 compile:
 	yarn run build
+
+# Build Go backend locally
+go-build:
+	CGO_ENABLED=0 go build -o backend ./cmd/backend/
 
 # Podman Login
 podman-login:
@@ -35,21 +37,5 @@ podman-push-nocompile: podman-build-nocompile
 podman-push-nobuild:
 	podman push ${IMG}
 
-# ── Showroom Proxy Watcher ─────────────────────────────────────────────────
-
-# Build the watcher image
-watcher-build:
-	podman build $(PODMAN_ARGS) showroom-proxy-watcher -t ${WATCHER_IMG} -f showroom-proxy-watcher/Containerfile
-
-# Push the watcher image
-watcher-push: watcher-build
-	podman push ${WATCHER_IMG}
-
-# Just push the watcher image
-watcher-push-nobuild:
-	podman push ${WATCHER_IMG}
-
-# Build and push all images
-all-build: podman-build watcher-build
-
-all-push: podman-push watcher-push
+# Build and push
+all-push: podman-push

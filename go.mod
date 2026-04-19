@@ -1,8 +1,9 @@
-module github.com/rhai/showroom-proxy-watcher
+module github.com/eformat/rhai-workshop-plugin
 
 go 1.25.7
 
 require (
+	github.com/gorilla/mux v1.8.1
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3

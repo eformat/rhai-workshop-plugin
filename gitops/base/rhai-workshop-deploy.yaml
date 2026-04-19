@@ -10,31 +10,6 @@ metadata:
   labels:
     app: rhai-workshop-plugin
     app.kubernetes.io/part-of: rhai-workshop-plugin
-  name: nginx-conf
-  namespace: rhai-workshop-plugin
-data:
-  nginx.conf: |
-    error_log /dev/stdout info;
-    events {}
-    http {
-      access_log         /dev/stdout;
-      include            /etc/nginx/mime.types;
-      default_type       application/octet-stream;
-      keepalive_timeout  65;
-      server {
-        listen              9443 ssl;
-        ssl_certificate     /var/serving-cert/tls.crt;
-        ssl_certificate_key /var/serving-cert/tls.key;
-        root                /usr/share/nginx/html;
-      }
-    }
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    app: rhai-workshop-plugin
-    app.kubernetes.io/part-of: rhai-workshop-plugin
   name: workshop-config
   namespace: rhai-workshop-plugin
 data:
@@ -51,10 +26,11 @@ metadata:
   name: rhai-workshop-plugin
   namespace: rhai-workshop-plugin
 ---
+# ClusterRole for init container: enable console plugin + patch IngressController
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: rhai-workshop-consolelink-reader
+  name: rhai-workshop-cluster-setup
 rules:
 - apiGroups: ["console.openshift.io"]
   resources: ["consolelinks"]
@@ -69,14 +45,66 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: rhai-workshop-consolelink-reader
+  name: rhai-workshop-cluster-setup
 subjects:
 - kind: ServiceAccount
   name: rhai-workshop-plugin
   namespace: rhai-workshop-plugin
 roleRef:
   kind: ClusterRole
-  name: rhai-workshop-consolelink-reader
+  name: rhai-workshop-cluster-setup
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole for Go backend auth middleware: TokenReview + SubjectAccessReview
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rhai-workshop-auth
+rules:
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rhai-workshop-auth
+subjects:
+- kind: ServiceAccount
+  name: rhai-workshop-plugin
+  namespace: rhai-workshop-plugin
+roleRef:
+  kind: ClusterRole
+  name: rhai-workshop-auth
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole for Go backend config discovery: read ConsoleLinks + ConfigMaps
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rhai-workshop-config-reader
+rules:
+- apiGroups: ["console.openshift.io"]
+  resources: ["consolelinks"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rhai-workshop-config-reader
+subjects:
+- kind: ServiceAccount
+  name: rhai-workshop-plugin
+  namespace: rhai-workshop-plugin
+roleRef:
+  kind: ClusterRole
+  name: rhai-workshop-config-reader
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
@@ -107,7 +135,7 @@ spec:
     spec:
       serviceAccountName: rhai-workshop-plugin
       initContainers:
-      - name: config-init
+      - name: cluster-setup
         image: registry.redhat.io/openshift4/ose-cli:latest
         command:
         - /bin/sh
@@ -143,37 +171,6 @@ spec:
               }
             }
           }"
-
-          # Generate config.json
-          echo "Discovering OpenShift AI URL from consolelink/rhodslink..."
-          OPENSHIFT_AI_URL=""
-          for i in 1 2 3; do
-            OPENSHIFT_AI_URL=$(oc get consolelink rhodslink -o jsonpath='{.spec.href}' 2>&1) && break
-            echo "Attempt $i failed: $OPENSHIFT_AI_URL"
-            OPENSHIFT_AI_URL=""
-            sleep 5
-          done
-          if [ -z "$OPENSHIFT_AI_URL" ]; then
-            echo "WARNING: Could not discover openshiftAiUrl. Available consolelinks:"
-            oc get consolelinks --no-headers 2>&1 || true
-          else
-            echo "Discovered openshiftAiUrl: $OPENSHIFT_AI_URL"
-          fi
-          TUTORIAL_URLS=$(cat /config/tutorialUrls)
-          SHOW_TABS=$(cat /config/showTabs 2>/dev/null || echo "true")
-          cat > /config-out/config.json <<EOF
-          {
-            "openshiftAiUrl": "${OPENSHIFT_AI_URL}",
-            "tutorialUrls": ${TUTORIAL_URLS},
-            "showTabs": ${SHOW_TABS}
-          }
-          EOF
-        volumeMounts:
-        - mountPath: /config
-          name: workshop-config
-          readOnly: true
-        - mountPath: /config-out
-          name: generated-config
       containers:
       - image: quay.io/eformat/rhai-workshop-plugin:latest
         imagePullPolicy: Always
@@ -181,18 +178,37 @@ spec:
         ports:
         - containerPort: 9443
           protocol: TCP
+        env:
+        - name: PORT
+          value: "9443"
+        - name: PLUGIN_DIST_DIR
+          value: /app/dist
+        - name: TLS_CERT_FILE
+          value: /var/serving-cert/tls.crt
+        - name: TLS_KEY_FILE
+          value: /var/serving-cert/tls.key
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
         volumeMounts:
         - mountPath: /var/serving-cert
           name: plugin-serving-cert
           readOnly: true
-        - mountPath: /etc/nginx/nginx.conf
-          name: nginx-conf
-          readOnly: true
-          subPath: nginx.conf
-        - mountPath: /usr/share/nginx/html/config.json
-          name: generated-config
-          readOnly: true
-          subPath: config.json
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       volumes:
@@ -200,16 +216,6 @@ spec:
         secret:
           defaultMode: 420
           secretName: plugin-serving-cert
-      - name: nginx-conf
-        configMap:
-          defaultMode: 420
-          name: nginx-conf
-      - name: workshop-config
-        configMap:
-          defaultMode: 420
-          name: workshop-config
-      - name: generated-config
-        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -247,3 +253,12 @@ spec:
       name: rhai-workshop-plugin
       namespace: rhai-workshop-plugin
       port: 9443
+  proxy:
+    - alias: backend
+      authorization: UserToken
+      endpoint:
+        type: Service
+        service:
+          name: rhai-workshop-plugin
+          namespace: rhai-workshop-plugin
+          port: 9443

@@ -2,9 +2,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - ../../base
-- showroom-proxy-watcher.yaml
-- showroom-proxy-conf.yaml
+- showroom-rbac.yaml
 patches:
-- path: patch-nginx-conf.yaml
 - path: patch-workshop-config.yaml
-- path: patch-deployment.yaml

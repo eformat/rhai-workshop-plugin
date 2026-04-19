@@ -31,7 +31,8 @@ const DEFAULT_CONFIG: WorkshopConfig = {
   showTabs: true,
 };
 
-const PLUGIN_BASE = '/api/plugins/rhai-workshop-plugin';
+// Console proxy path — the console injects the user's Bearer token on this path.
+const BACKEND_API = '/api/proxy/plugin/rhai-workshop-plugin/backend';
 
 // Detect the logged-in user's guid and rewrite tutorial URLs through the
 // per-user showroom proxy when the watcher has configured one.
@@ -47,7 +48,7 @@ function rewriteTutorialUrls(urls: TutorialEntry[], guid: string): TutorialEntry
     }
     return {
       ...entry,
-      url: `${PLUGIN_BASE}/tutorial-proxy/${guid}${path}`,
+      url: `${BACKEND_API}/api/tutorial-proxy/${guid}${path}`,
     };
   });
 }
@@ -56,20 +57,19 @@ function useCurrentUserGuid(): string | null {
   const [guid, setGuid] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    // Fetch proxy-users.json (served by the plugin's own nginx)
-    // and the current OpenShift user identity in parallel.
+    // Fetch proxy-users and current user identity via the authenticated
+    // console proxy (Go backend validates tokens via TokenReview).
     Promise.all([
-      fetch(`${PLUGIN_BASE}/proxy-users.json`)
+      fetch(`${BACKEND_API}/api/proxy-users`)
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []) as Promise<string[]>,
-      fetch('/api/kubernetes/apis/user.openshift.io/v1/users/~')
+      fetch(`${BACKEND_API}/api/auth/me`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null) as Promise<any>,
-    ]).then(([proxyUsers, user]) => {
-      if (!user?.metadata?.name || !Array.isArray(proxyUsers) || proxyUsers.length === 0) return;
+    ]).then(([proxyUsers, me]) => {
+      if (!me?.username || !Array.isArray(proxyUsers) || proxyUsers.length === 0) return;
       // Username format: "user-<guid>" → extract guid
-      const username: string = user.metadata.name;
-      const m = username.match(/^user-(.+)$/);
+      const m = (me.username as string).match(/^user-(.+)$/);
       if (m && proxyUsers.includes(m[1])) {
         setGuid(m[1]);
       }
@@ -84,7 +84,7 @@ function useWorkshopConfig(): WorkshopConfig {
   const guid = useCurrentUserGuid();
 
   React.useEffect(() => {
-    fetch(`${PLUGIN_BASE}/config.json`)
+    fetch(`${BACKEND_API}/api/config`)
       .then((res) => {
         if (res.ok) return res.json();
         throw new Error('config not found');
